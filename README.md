@@ -8,10 +8,17 @@ without `do` blocks.
 Resources are things like
 * Open file handles
 * Temporary files and directories
-* Anything else which is currently handled with `do`-blocks.
+* Many other things which are currently handled with `do`-blocks.
 
+The `@!` macro calls a function and associates any resources created inside it
+with the "current context" as created by the `@context` macro. When a
+`@context` block exits, all cleanup code associated with the registered
+resources is run immediately.
 
-# Examples
+The `@defer` macro defers an arbitrary cleanup expression to the end of the
+current `@context`.
+
+## Examples
 
 Open a file, read all the lines and close it again
 
@@ -60,16 +67,15 @@ end
 ## Design
 
 There's been plenty of prior discussion about how to clean up resources in a
-timely and convenient fasion, including:
+timely and convenient fashion, including:
 
-* Resource cleanup with `defer` and `!` syntax
-  * https://github.com/JuliaLang/julia/issues/7721
-* The woes of finalizers
-  * https://github.com/JuliaLang/julia/issues/11207
-* A previous prototype, Defer.jl, used similar syntax
+* Resource cleanup with `defer` and `!` syntax https://github.com/JuliaLang/julia/issues/7721
+* The woes of finalizers https://github.com/JuliaLang/julia/issues/11207
+* A previous prototype, Defer.jl, used similar syntax to Contexts.jl
   https://github.com/adambrewster/Defer.jl
-* Structured concurrency and the cancellation problem is also related
-  https://github.com/JuliaLang/julia/issues/33248
+* Structured concurrency and the cancellation problem is closely related
+  https://github.com/JuliaLang/julia/issues/33248 because `@async` tasks are a
+  type of resource.
 
 The standard solution is still the `do` block, but this has some disadvantages:
 * It's extremely inconvenient at the REPL; you cannot work with the
