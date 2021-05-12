@@ -91,30 +91,40 @@ end
         orig_stdin = stdin
         orig_stdout = stdout
         orig_stderr = stderr
+
+        readline_result = nothing
         @context begin
             (_,io) = @! mktemp()
             @! redirect_stdout(io)
             println("hi")
             flush(io)
             seek(io, 0)
-            @test readline(io) == "hi"
+            readline_result = readline(io)
         end
+        @test readline_result == "hi"
+
+        readline_result = nothing
         @context begin
             (_,io) = @! mktemp()
             @! redirect_stderr(io)
             println(stderr, "hi")
             flush(io)
             seek(io, 0)
-            @test readline(io) == "hi"
+            readline_result = readline(io)
         end
+        @test readline_result == "hi"
+
+        readline_result = nothing
         @context begin
             (_,io) = @! mktemp()
             println(io, "hi")
             flush(io)
             seek(io,0)
             @! redirect_stdin(io)
-            @test readline() == "hi"
+            readline_result = readline()
         end
+        @test readline_result == "hi"
+
         @test orig_stdin == stdin
         @test orig_stdout == stdout
         @test orig_stderr == stderr
