@@ -14,8 +14,10 @@ end
 
 function Base.mktemp(ctx::AbstractContext, parent=tempdir())
     (path, io) = mktemp(parent, cleanup=false)
-    @defer ctx close(io)
-    @defer ctx rm(path, force=true)
+    @defer ctx begin
+        close(io)
+        rm(path, force=true)
+    end
     (path, io)
 end
 
