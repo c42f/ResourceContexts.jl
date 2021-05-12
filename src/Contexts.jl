@@ -40,6 +40,13 @@ function defer(f::Function, ctx::Context)
     nothing
 end
 
+"""
+    @defer expression
+    @defer context expression
+
+Defers execution of the cleanup `expression` until the exit of the current
+`@context` block, or the cleanup of the explicitly provided `context`.
+"""
 macro defer(ex)
     quote
         ctx = $(Expr(:islocal, esc(_context_name))) ?
@@ -54,6 +61,17 @@ macro defer(ctx, ex)
     end
 end
 
+"""
+    @context begin ... end
+    @context function f() ... end
+
+`@context` creates a local context and runs the provided code within that
+context. When the code exits, any resources registered with the context will be
+cleaned up with `Contexts.cleanup!()`.
+
+When the code is a `function` definition, the context block is inserted around
+the function body.
+"""
 macro context(ex)
     if ex.head == :function
         ex.args[2] = quote
@@ -78,6 +96,15 @@ macro context(ex)
     end
 end
 
+"""
+    @! func(args)
+
+The `@!` macro calls `func(ctx, args)`, where `ctx` is the "current context" as
+created by the `@context` macro.
+
+If `@!` is used outside a `@context` block, a warning is emitted and the global
+context is used.
+"""
 macro !(ex)
     @assert ex.head == :call
     map!(a->esc(a), ex.args, ex.args)
