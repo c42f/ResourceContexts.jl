@@ -45,22 +45,15 @@ const _context_name = :var"#context"
 
 """
     @defer expression
-    @defer context expression
 
 Defers execution of the cleanup `expression` until the exit of the current
-`@context` block, or the cleanup of the explicitly provided `context`.
+`@context` block.
 """
 macro defer(ex)
     quote
         ctx = $(Expr(:islocal, esc(_context_name))) ?
             $(esc(_context_name)) : global_context($__module__, $(__source__.line), $(QuoteNode(__source__.file)))
         defer(()->$(esc(ex)), ctx)
-    end
-end
-
-macro defer(ctx, ex)
-    quote
-        defer(()->$(esc(ex)), $(esc(ctx)))
     end
 end
 
@@ -103,19 +96,38 @@ end
     @! func(args)
 
 The `@!` macro calls `func(ctx, args)`, where `ctx` is the "current context" as
-created by the `@context` macro.
+created by the `@context` macro.  If `@!` is used outside a `@context` block, a
+warning is emitted and the global context is used.
 
-If `@!` is used outside a `@context` block, a warning is emitted and the global
-context is used.
+---
+
+    @! function my_func(...)
+        ...
+    end
+
+This form adds a `context::AbstractContext` argument as the first argument to
+`my_func`. This allows the responsibility for resource cleanup to be passed
+back to the caller by using `@defer` within `my_func` or `@!` to further chain
+the resource handling.
 """
 macro !(ex)
-    @assert ex.head == :call
-    map!(a->esc(a), ex.args, ex.args)
-    insert!(ex.args, 2, :ctx)
-    quote
-        ctx = $(Expr(:islocal, esc(_context_name))) ?
-            $(esc(_context_name)) : global_context($__module__, $(__source__.line), $(QuoteNode(__source__.file)))
-        $ex
+    if Meta.isexpr(ex, :call)
+        map!(a->esc(a), ex.args, ex.args)
+        insert!(ex.args, 2, :ctx)
+        quote
+            ctx = $(Expr(:islocal, esc(_context_name))) ?
+                $(esc(_context_name)) : global_context($__module__, $(__source__.line), $(QuoteNode(__source__.file)))
+            $ex
+        end
+    elseif Meta.isexpr(ex, :function)
+        # Insert context argument
+        callargs = ex.args[1].args
+        i = length(callargs) > 1 && Meta.isexpr(callargs[2], :parameters) ? 3 : 2
+            # handle keywords
+        insert!(callargs, i, :($_context_name::$Contexts.AbstractContext))
+        esc(ex)
+    else
+        error("Expected call or function definition as arguments to `@!`")
     end
 end
 
@@ -138,7 +150,7 @@ they can instead use `func` with a context, as in
 x,y = @! enter_do(func, args...)
 ```
 """
-function enter_do(ctx::AbstractContext, func::Function, args...; kws...)
+@! function enter_do(func::Function, args...; kws...)
     value = Channel(1) # Must be buffered in case two values are put!
     done = Channel(1) # Must be buffered in case listening task is dead
     function do_block_proxy(args...)
@@ -160,7 +172,7 @@ function enter_do(ctx::AbstractContext, func::Function, args...; kws...)
         # return. Thus, force a TaskFailedException immediately.
         wait(task)
     end
-    @defer ctx begin
+    @defer begin
         put!(done, true) # trigger async task to exit and free resources
         wait(task)       # failures in `task` will be reported from here
     end

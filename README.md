@@ -41,16 +41,6 @@ Create a temporary file and ensure it's cleaned up afterward
 end
 ```
 
-Defer shredding of a secretbuffer until scope exit
-
-```julia
-@context function f()
-    buf = SecretBuffer()
-    @defer shred!(buf)
-    secret_computation(buf)
-end
-```
-
 Acquire a pair of locks (and release them in the opposite order)
 
 ```julia
@@ -64,6 +54,25 @@ function f()
     end
     @info "Outside locked section" islocked(lk1) islocked(lk2)
 end
+```
+
+A resource creation function `create_secret()` which defers the shredding of
+the returned `Base.SecretBuffer` to the caller
+
+```julia
+@! function create_secret()
+    buf = Base.SecretBuffer()
+    write(buf, rand(UInt64)) # super secret ?
+    seek(buf, 0)
+    @defer Base.shred!(buf)
+    buf
+end
+
+@context begin
+    buf = @! create_secret()
+    @info "Secret first byte" read(buf, 1)
+end
+# buf has been `shred!`ed at this point
 ```
 
 Interoperability with "do-block-based" resource management is available with

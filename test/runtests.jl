@@ -1,9 +1,10 @@
 using Contexts
 using Test
 
-function foo(ctx::AbstractContext, x)
-    # Use of @defer with explicit context
-    @defer ctx push!(x, :A)
+# Use of @! to pass context to resource creation function
+@! function foo(x)
+    # Use of @defer inside a resource creation function
+    @defer push!(x, :A)
 end
 
 @testset "Cleanup ordering" begin
