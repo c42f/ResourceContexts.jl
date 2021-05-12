@@ -92,38 +92,46 @@ end
         orig_stdout = stdout
         orig_stderr = stderr
 
-        readline_result = nothing
+        stdout_result = nothing
         @context begin
             (_,io) = @! mktemp()
             @! redirect_stdout(io)
             println("hi")
             flush(io)
             seek(io, 0)
-            readline_result = readline(io)
+            stdout_result = readline(io)
         end
-        @test readline_result == "hi"
+        @test stdout_result == "hi"
 
-        readline_result = nothing
+        stderr_result = nothing
         @context begin
             (_,io) = @! mktemp()
             @! redirect_stderr(io)
             println(stderr, "hi")
             flush(io)
             seek(io, 0)
-            readline_result = readline(io)
+            stderr_result = readline(io)
         end
-        @test readline_result == "hi"
+        if VERSION < v"1.7-DEV"
+            @test stderr_result == "hi"
+        else
+            @test_broken stderr_result == "hi"
+        end
 
-        readline_result = nothing
+        stdin_result = nothing
         @context begin
             (_,io) = @! mktemp()
             println(io, "hi")
             flush(io)
             seek(io,0)
             @! redirect_stdin(io)
-            readline_result = readline()
+            stdin_result = readline()
         end
-        @test readline_result == "hi"
+        if VERSION < v"1.7-DEV"
+            @test stdin_result == "hi"
+        else
+            @test_broken stdin_result == "hi"
+        end
 
         @test orig_stdin == stdin
         @test orig_stdout == stdout
