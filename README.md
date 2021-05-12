@@ -66,6 +66,29 @@ function f()
 end
 ```
 
+Interoperability with "do-block-based" resource management is available with
+the `enter_do` function:
+
+```julia
+function resource_func(f::Function, arg)
+    @info "Setting up resources"
+    fake_resource = 40
+    f(fake_resource + arg)
+    @info "Tear down resources"
+end
+
+# Normal usage
+resource_func(2) do x
+    @info "Resource ready" x
+end
+
+# Context-based form
+@context begin
+    x = @! enter_do(resource_func, 2)
+    @info "Resource ready" x
+end
+```
+
 # Design
 
 The standard solution for Julian resource management is still the `do` block,
