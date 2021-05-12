@@ -124,10 +124,14 @@ end
         oldpath = pwd()
         @context begin
             @! cd()
-            @test pwd() == homedir()
+            # Can't just compare paths here due to the fact that some of these
+            # could be symlinks on macOS.  Instead use `samefile` with an alias
+            # for @test pretty printing
+            ≃(a,b) = Base.Filesystem.samefile(a,b)
+            @test pwd() ≃ homedir()
             path = @! mktempdir()
             @! cd(path)
-            @test pwd() == path
+            @test pwd() ≃ path
         end
         @test pwd() == oldpath
     end
