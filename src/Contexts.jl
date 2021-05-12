@@ -1,6 +1,6 @@
 module Contexts
 
-export @context, @!, @defer, AbstractContext
+export @context, @!, @defer, AbstractContext, enter_do
 
 abstract type AbstractContext end
 
@@ -39,6 +39,9 @@ function defer(f::Function, ctx::Context)
     push!(ctx.resources, f)
     nothing
 end
+
+# Name of the context variable
+const _context_name = :var"#context"
 
 """
     @defer expression
@@ -116,6 +119,54 @@ macro !(ex)
     end
 end
 
+"""
+    @! enter_do(func, args...)
+    enter_do(ctx, func, args...)
+
+`enter_do` transforms do-block-based resource management into context-based
+resource management. That is, if the user is expected to write
+
+```
+func(args...) do x,y
+    # do stuff with x,y
+end
+```
+
+they can instead use `func` with a context, as in
+
+```
+x,y = @! enter_do(func, args...)
+```
+"""
+function enter_do(ctx::AbstractContext, func::Function, args...; kws...)
+    value = Channel(1) # Must be buffered in case two values are put!
+    done = Channel(1) # Must be buffered in case listening task is dead
+    function do_block_proxy(args...)
+        put!(value, args)
+        take!(done)
+    end
+    task = @async try
+        func(do_block_proxy, args...; kws...)
+    catch
+        # In case of failure, ensure the receiving task has something to take
+        # from the channel.
+        put!(value, nothing)
+        rethrow()
+    end
+    args = take!(value)
+    if isnothing(args)
+        @assert istaskfailed(task)
+        # The task is failed at this point and we don't have a valid value to
+        # return. Thus, force a TaskFailedException immediately.
+        wait(task)
+    end
+    @defer ctx begin
+        put!(done, true) # trigger async task to exit and free resources
+        wait(task)       # failures in `task` will be reported from here
+    end
+    args
+end
+
 #-------------------------------------------------------------------------------
 # Global context
 function __init__()
@@ -123,8 +174,6 @@ function __init__()
         global_cleanup!()
     end
 end
-
-_context_name = :var"#context"
 
 _global_context = Context()
 

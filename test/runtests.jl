@@ -29,6 +29,44 @@ end
     end
 end
 
+@testset "enter_do — context management for `do` blocks" begin
+    function invoke_user_func(f)
+        fake_resource = 42
+        f(fake_resource)
+    end
+
+    function fail_before_user_func(f)
+        error("Oops1")
+        f()
+    end
+    function fail_after_user_func(f)
+        f()
+        error("Oops2")
+    end
+
+    @context begin
+        @test @!(enter_do(invoke_user_func)) == (42,)
+    end
+
+    @test try
+        @context begin
+            @! enter_do(fail_before_user_func)
+        end
+    catch e
+        @test e isa TaskFailedException
+        first(Base.catch_stack(e.task))[1]
+    end == ErrorException("Oops1")
+
+    @test try
+        @context begin
+            @! enter_do(fail_after_user_func)
+        end
+    catch e
+        @test e isa TaskFailedException
+        first(Base.catch_stack(e.task))[1]
+    end == ErrorException("Oops2")
+end
+
 @testset "Base interop" begin
     @testset "open() and mktemp()" begin
         path = ""
