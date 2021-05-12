@@ -1,3 +1,4 @@
+# Filesystem
 
 function Base.open(ctx::AbstractContext, filename::AbstractString, mode::AbstractString; kws...)
     io = open(filename, mode; kws...)
@@ -24,13 +25,24 @@ function Base.mktempdir(ctx::AbstractContext, parent=tempdir(); prefix="jl_")
     path
 end
 
+function Base.cd(ctx::AbstractContext, path::AbstractString=homedir())
+    oldpath = pwd()
+    cd(path)
+    @defer ctx cd(oldpath)
+    # TODO: `Base.cd(::Function, path)` has some magic here for unix which we
+    # could replicate.
+end
+
+# Locks
+
 function Base.lock(ctx::AbstractContext, lk::Base.AbstractLock)
     lock(lk)
     @defer ctx unlock(lk)
 end
 
 
-#-------------------------------------------------------------------------------
+# Standard streams
+
 function Base.redirect_stdout(ctx::AbstractContext, stream)
     prev_stream = stdout
     x = redirect_stdout(stream)

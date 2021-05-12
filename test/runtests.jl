@@ -119,4 +119,16 @@ end
         @test orig_stdout == stdout
         @test orig_stderr == stderr
     end
+
+    @testset "cd()" begin
+        oldpath = pwd()
+        @context begin
+            @! cd()
+            @test pwd() == homedir()
+            path = @! mktempdir()
+            @! cd(path)
+            @test pwd() == path
+        end
+        @test pwd() == oldpath
+    end
 end
