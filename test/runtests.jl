@@ -11,15 +11,20 @@ end
     @defer push!(x, label)
 end
 
+@! function baz(x::T, label) where {T}
+    @defer push!(x, label)
+end
+
 @testset "Cleanup ordering" begin
     cleanups = []
     @context begin
         @defer push!(cleanups, :A)
         @! foo(cleanups, :B)
         @! bar(cleanups; label=:C)
+        @! baz(cleanups, :D)
         @test cleanups == []
     end
-    @test cleanups == [:C, :B, :A]
+    @test cleanups == [:D, :C, :B, :A]
 end
 
 @testset "Exceptions during cleanup" begin

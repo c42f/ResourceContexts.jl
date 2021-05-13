@@ -124,7 +124,8 @@ macro !(ex)
         end
     elseif isexpr(ex, :function)
         # Insert context argument
-        callargs = ex.args[1].args
+        callargs = isexpr(ex.args[1], :where) ?
+                   ex.args[1].args[1].args : ex.args[1].args
         i = length(callargs) > 1 && isexpr(callargs[2], :parameters) ? 3 : 2
             # handle keywords
         insert!(callargs, i, :($_context_name::$Contexts.AbstractContext))
