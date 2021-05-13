@@ -145,6 +145,54 @@ This is a break with some familiar APIs such as the standard file handles
 returned by `open(filename)` which are both a stream interface and a resource
 in need of cleanup.
 
+## Possible language integration
+
+What would all this look like as a language feature?
+
+* `@!` could be replaced with a postfix `!` as proposed way back in 2015 or so.
+* `defer` might become a keyword so that it can have special behavior such as
+  ignoring its return value. In a similar way to the code which runs inside
+  `finally`, there's no sense in having a "value returned by" `defer`. In
+  particular, I've observed that it frequently leads to the introduction of
+  temporary variables simply to transfer the result of the expression occurring
+  prior to the `defer` line.
+* `@context` would be implicit at function boundaries, global `let` blocks, and
+  potentially other scopes within functions. Getting this part correct is
+  still a tricky design problem. For example, looping constructs should
+  introduce an implicit context, but how then can the user disable this in
+  particular cases?
+
+Using the example from above, we've got
+
+```julia
+function create_secret()!
+    buf = Base.SecretBuffer()
+    write(buf, rand(UInt64)) # super secret ?
+    seek(buf, 0)
+    defer Base.shred!(buf)
+end
+
+let
+    buf = create_secret()!
+    @info "Secret first byte" read(buf, 1)
+end # <- `buf` shredded here
+```
+
+One might be concerned that this definition of `create_secret()` hides the
+calling convention and that explicitly annotating the passed context might be
+more transparent. In that case we could go with syntax more like the existing
+macro annotations such as `@nospecialize` which attach metadata to function
+arguments. For example,
+
+```julia
+function create_secret(@passcontext(ctx::AbstractContext))
+    buf = Base.SecretBuffer()
+    write(buf, rand(UInt64)) # super secret ?
+    seek(buf, 0)
+    defer Base.shred!(buf)
+end
+```
+
 ## References
 
 * Resource cleanup with `defer` and `!` syntax
