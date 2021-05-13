@@ -192,7 +192,7 @@ _global_context = Context()
 @noinline function global_context(_module, file, line)
     @warn """Using global `Context` — use a `@context` block to avoid this warning.
              Use `Contexts.global_cleanup!()` to clean up the resource.""" #=
-        =# _module=_module _group="context" _file=file _line=line
+        =# _module=_module _group="context" _file=string(file) _line=line
     _global_context
 end
 
