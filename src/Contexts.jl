@@ -1,6 +1,6 @@
 module Contexts
 
-export @context, @!, @defer, AbstractContext, enter_do
+export @context, @!, @defer, enter_do
 
 abstract type AbstractContext end
 
