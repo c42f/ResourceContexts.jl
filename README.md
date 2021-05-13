@@ -9,13 +9,17 @@ Resources are objects which need cleanup code to run to finalize their state.
 For example,
 * Open file handles
 * Temporary files and directories
-* Background `Task`s for managing IO
+* Background `Task`s
 * Many other things which are currently handled with `do`-blocks.
 
-The `@!` macro calls a function and associates any resources created inside it
-with the "current context" as created by the `@context` macro. When a
-`@context` block exits, all cleanup code associated with the registered
-resources is run immediately.
+The `@!` macro calls or defines "context functions" — functions which take an
+`AbstractContext` as the first argument and associate any resources with that
+context. This package provides context-based overrides for `Base` functions
+including `open`, `mktemp`, `mktempdir`, `cd` and others.
+
+The `@context` macro associates a context with the current code block which
+will be passed to any context functions invoked with `@!`. When a `@context`
+block exits the cleanup code associated with the context runs.
 
 The `@defer` macro defers an arbitrary cleanup expression to the end of the
 current `@context`.
