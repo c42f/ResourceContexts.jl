@@ -54,7 +54,7 @@ Defers execution of the cleanup `expression` until the exit of the current
 macro defer(ex)
     quote
         ctx = $(Expr(:islocal, esc(_context_name))) ?
-            $(esc(_context_name)) : global_context($__module__, $(__source__.line), $(QuoteNode(__source__.file)))
+            $(esc(_context_name)) : WarnGlobalContext($__module__, $(__source__.line), $(QuoteNode(__source__.file)))
         defer(()->$(esc(ex)), ctx)
     end
 end
@@ -119,7 +119,7 @@ macro !(ex)
         insert!(ex.args, i, :ctx)
         quote
             ctx = $(Expr(:islocal, esc(_context_name))) ?
-                $(esc(_context_name)) : global_context($__module__, $(__source__.line), $(QuoteNode(__source__.file)))
+                $(esc(_context_name)) : WarnGlobalContext($__module__, $(__source__.line), $(QuoteNode(__source__.file)))
             $ex
         end
     elseif isexpr(ex, :function)
@@ -192,11 +192,25 @@ end
 
 _global_context = Context()
 
-@noinline function global_context(_module, file, line)
-    @warn """Using global `Context` — use a `@context` block to avoid this warning.
-             Use `Contexts.global_cleanup!()` to clean up the resource.""" #=
-        =# _module=_module _group="context" _file=string(file) _line=line
-    _global_context
+struct WarnGlobalContext <: AbstractContext
+    _module::Module
+    line::Int
+    file::String
+    did_warn::Ref{Bool}
+end
+WarnGlobalContext(_module, line, file) = WarnGlobalContext(_module, line, string(file), Ref(false))
+
+@noinline function defer(f::Function, ctx::WarnGlobalContext)
+    if !ctx.did_warn[]
+        # Suppress warnings by only warning lazily when the first resource is
+        # added to `ctx`.
+        @warn """Using global `Context` — use a `@context` block to avoid this warning.
+                 Use `Contexts.global_cleanup!()` to clean up the resource.""" #=
+            =# _module=ctx._module _group="context" _file=ctx.file _line=ctx.line
+        ctx.did_warn[] = true
+    end
+    push!(_global_context.resources, f)
+    nothing
 end
 
 function global_cleanup!()
