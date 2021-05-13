@@ -16,7 +16,7 @@ end
     @context begin
         @defer push!(cleanups, :A)
         @! foo(cleanups, :B)
-        @! bar(cleanups, label=:C)
+        @! bar(cleanups; label=:C)
         @test cleanups == []
     end
     @test cleanups == [:C, :B, :A]

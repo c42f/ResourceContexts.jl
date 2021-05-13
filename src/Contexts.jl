@@ -4,6 +4,8 @@ export @context, @!, @defer, enter_do
 
 abstract type AbstractContext end
 
+using Base.Meta: isexpr
+
 struct Context <: AbstractContext
     resources
 end
@@ -111,18 +113,19 @@ back to the caller by using `@defer` within `my_func` or `@!` to further chain
 the resource handling.
 """
 macro !(ex)
-    if Meta.isexpr(ex, :call)
+    if isexpr(ex, :call)
+        i = length(ex.args) > 1 && isexpr(ex.args[2], :parameters) ? 3 : 2
         map!(a->esc(a), ex.args, ex.args)
-        insert!(ex.args, 2, :ctx)
+        insert!(ex.args, i, :ctx)
         quote
             ctx = $(Expr(:islocal, esc(_context_name))) ?
                 $(esc(_context_name)) : global_context($__module__, $(__source__.line), $(QuoteNode(__source__.file)))
             $ex
         end
-    elseif Meta.isexpr(ex, :function)
+    elseif isexpr(ex, :function)
         # Insert context argument
         callargs = ex.args[1].args
-        i = length(callargs) > 1 && Meta.isexpr(callargs[2], :parameters) ? 3 : 2
+        i = length(callargs) > 1 && isexpr(callargs[2], :parameters) ? 3 : 2
             # handle keywords
         insert!(callargs, i, :($_context_name::$Contexts.AbstractContext))
         esc(ex)
