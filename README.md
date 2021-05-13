@@ -56,6 +56,24 @@ function f()
 end
 ```
 
+Return a bare `Ptr` from a function, while preserving the underlying resource
+that it depends on:
+
+```julia
+@! function raw_buffer(len)
+    buf = Vector{UInt8}(undef, len)
+    @defer GC.@preserve buf nothing
+    pointer(buf)
+end
+
+@context begin
+    len = 1_000_000_000
+    ptr = @! raw_buffer(len)
+    GC.gc() # `buf` is preserved!
+    unsafe_store!(ptr, 0xff)
+end
+```
+
 A resource creation function `create_secret()` which defers the shredding of
 the returned `Base.SecretBuffer` to the caller
 
