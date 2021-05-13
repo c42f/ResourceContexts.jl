@@ -133,7 +133,6 @@ end
 
 """
     @! enter_do(func, args...)
-    enter_do(ctx, func, args...)
 
 `enter_do` transforms do-block-based resource management into context-based
 resource management. That is, if the user is expected to write

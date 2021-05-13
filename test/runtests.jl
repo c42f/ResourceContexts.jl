@@ -2,19 +2,24 @@ using Contexts
 using Test
 
 # Use of @! to pass context to resource creation function
-@! function foo(x)
+@! function foo(x, label)
     # Use of @defer inside a resource creation function
-    @defer push!(x, :A)
+    @defer push!(x, label)
+end
+
+@! function bar(x; label=nothing)
+    @defer push!(x, label)
 end
 
 @testset "Cleanup ordering" begin
     cleanups = []
     @context begin
-        @! foo(cleanups)
-        @defer push!(cleanups, :B)
+        @defer push!(cleanups, :A)
+        @! foo(cleanups, :B)
+        @! bar(cleanups, label=:C)
         @test cleanups == []
     end
-    @test cleanups == [:B, :A]
+    @test cleanups == [:C, :B, :A]
 end
 
 @testset "Exceptions during cleanup" begin
