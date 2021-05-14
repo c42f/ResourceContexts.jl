@@ -1,16 +1,22 @@
 module Contexts
 
-export @context, @!, @defer, enter_do
+export @context, @!, @defer, enter_do, Context
 
 abstract type AbstractContext end
 
 using Base.Meta: isexpr
 
-struct Context <: AbstractContext
+mutable struct Context <: AbstractContext
     resources
 end
 
-Context() = Context([])
+function Context(needs_finalizer::Bool=true)
+    c = Context([])
+    if needs_finalizer
+        finalizer(cleanup!, c)
+    end
+    c
+end
 
 cleanup!(x) = close(x)
 cleanup!(f::Function) = f()
@@ -26,6 +32,7 @@ function _cleanup!(resources, i)
             cleanup!(resources[i])
             i -= 1
         end
+        i == 0 && empty!(resources)
     catch exc
         _cleanup!(resources, i-1)
         rethrow()
@@ -35,6 +42,7 @@ end
 function cleanup!(context::Context)
     # Clean up resources last to first.
     _cleanup!(context.resources, length(context.resources))
+    nothing
 end
 
 function defer(f::Function, ctx::Context)
@@ -74,7 +82,7 @@ macro context(ex)
     if ex.head == :function
         ex.args[2] = quote
             try
-                $(_context_name) = $Contexts.Context()
+                $(_context_name) = $Contexts.Context(false)
                 $(ex.args[2])
             finally
                 $Contexts.cleanup!($(_context_name))
@@ -83,7 +91,7 @@ macro context(ex)
         esc(ex)
     else
         quote
-            let $(esc(_context_name)) = Context()
+            let $(esc(_context_name)) = Context(false)
                 try
                     $(esc(ex))
                 finally
@@ -190,7 +198,7 @@ function __init__()
     end
 end
 
-_global_context = Context()
+_global_context = Context(false)
 
 @noinline function global_context(_module, file, line)
     @warn """Using global `Context` — use a `@context` block to avoid this warning.

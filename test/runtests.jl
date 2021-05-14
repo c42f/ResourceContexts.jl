@@ -78,4 +78,51 @@ end
     end == ErrorException("Oops2")
 end
 
+@testset "Cleanup robustness" begin
+    cleanup_count = 0
+    ctx = Contexts.Context()
+    Contexts.defer(ctx) do
+        cleanup_count += 1
+    end
+    Contexts.cleanup!(ctx)
+    Contexts.cleanup!(ctx)
+    @test cleanup_count == 1
+
+    # Exceptions
+    cleanup_count = 0
+    ctx = Contexts.Context()
+    Contexts.defer(ctx) do
+        cleanup_count += 1
+    end
+    Contexts.defer(ctx) do
+        error("X")
+    end
+    try
+        Contexts.cleanup!(ctx)
+    catch
+    end
+    # The second scheduled cleanup should still run even if the first throws
+    @test cleanup_count == 1
+    # Calling cleanup should not throw again
+    @test isnothing(Contexts.cleanup!(ctx))
+    @test cleanup_count == 1
+end
+
+@testset "Manually managed contexts" begin
+    @testset "Finalization" begin
+        did_cleanup = false
+        function forgotten_cleanup()
+            ctx = Contexts.Context()
+            Contexts.defer(ctx) do
+                did_cleanup = true
+            end
+        end
+        forgotten_cleanup()
+        GC.gc()
+        # Check that the finalizer of the manually managed `ctx` ran, cleaning up
+        # the resources used.
+        @test did_cleanup
+    end
+end
+
 include("base_interop.jl")
