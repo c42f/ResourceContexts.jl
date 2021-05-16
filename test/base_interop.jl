@@ -47,6 +47,36 @@
         @test !ispath(filepath)
     end
 
+    @testset "cd()" begin
+        oldpath = pwd()
+        @context begin
+            @! cd()
+            # Can't just compare paths here due to the fact that some of these
+            # could be symlinks on macOS.  Instead use `samefile` with an alias
+            # for @test pretty printing
+            ≃(a,b) = Base.Filesystem.samefile(a,b)
+            @test pwd() ≃ homedir()
+            path = @! mktempdir()
+            @! cd(path)
+            @test pwd() ≃ path
+        end
+        @test pwd() == oldpath
+    end
+
+    @testset "run()" begin
+        in_io = Pipe()
+        out_io = IOBuffer()
+        local proc
+        @context begin
+            proc = @! run(pipeline(`$(Base.julia_cmd()) -e 'write(stdout, readline(stdin))'`,
+                                   stdout=out_io, stdin=in_io))
+            @test !process_exited(proc)
+            println(in_io, "hi")
+        end
+        @test process_exited(proc)
+        @test String(take!(out_io)) == "hi"
+    end
+
     @testset "lock()" begin
         lk = ReentrantLock()
         @context begin
@@ -105,21 +135,5 @@
         @test orig_stdin == stdin
         @test orig_stdout == stdout
         @test orig_stderr == stderr
-    end
-
-    @testset "cd()" begin
-        oldpath = pwd()
-        @context begin
-            @! cd()
-            # Can't just compare paths here due to the fact that some of these
-            # could be symlinks on macOS.  Instead use `samefile` with an alias
-            # for @test pretty printing
-            ≃(a,b) = Base.Filesystem.samefile(a,b)
-            @test pwd() ≃ homedir()
-            path = @! mktempdir()
-            @! cd(path)
-            @test pwd() ≃ path
-        end
-        @test pwd() == oldpath
     end
 end

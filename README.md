@@ -15,7 +15,8 @@ For example,
 The `@!` macro calls or defines "context functions" — functions which take an
 `AbstractContext` as the first argument and associate any resources with that
 context. This package provides context-based overrides for `Base` functions
-including `open`, `mktemp`, `mktempdir`, `cd` and others.
+`open`, `mktemp`, `mktempdir`, `cd`, `run`, `lock` and
+`redirect_{stdout,stderr,stdin}`.
 
 The `@context` macro associates a context with the current code block which
 will be passed to any context functions invoked with `@!`. When a `@context`
@@ -25,6 +26,8 @@ The `@defer` macro defers an arbitrary cleanup expression to the end of the
 current `@context`.
 
 ## Examples
+
+### Manging resources without do blocks
 
 Open a file, read all the lines and close it again
 
@@ -60,8 +63,25 @@ function f()
 end
 ```
 
-Return a bare `Ptr` from a function, while preserving the underlying resource
-that it depends on:
+Start ten external processes and wait for all of them to finish before
+continuing
+
+```julia
+@context begin
+    for i=1:10
+        @! run(`sleep $(rand(2))`)
+    end
+end
+```
+
+### Functions which pass resources back to their callers
+
+Functions called as `@! foo(args...)` are passed the current context in the
+first argument; `foo(current_context, args...)` is called.  When `foo` is
+*defined* using `@!`, the context will automatically defer resource cleanup to
+the caller when using `@defer`. For example:
+
+Returning a bare `Ptr` to a temporary buffer:
 
 ```julia
 @! function raw_buffer(len)
@@ -73,13 +93,12 @@ end
 @context begin
     len = 1_000_000_000
     ptr = @! raw_buffer(len)
-    GC.gc() # `buf` is preserved!
+    GC.gc() # `buf` is preserved regardless of this call to gc()
     unsafe_store!(ptr, 0xff)
 end
 ```
 
-A resource creation function `create_secret()` which defers the shredding of
-the returned `Base.SecretBuffer` to the caller
+Defer zeroing of a secret buffer to the caller
 
 ```julia
 @! function create_secret()
@@ -97,8 +116,11 @@ end
 # buf has been `shred!`ed at this point
 ```
 
-Interoperability with "do-block-based" resource management is available with
-the `enter_do` function:
+### Interop with "do-block-based" resource management
+
+This is available with the `enter_do` function, which can "steal" the state
+from inside the do block and make it available in a `@context` block, or in the
+REPL:
 
 ```julia
 function resource_func(f::Function, arg)
@@ -113,11 +135,8 @@ resource_func(2) do x
     @info "Resource ready" x
 end
 
-# Context-based form
-@context begin
-    x = @! enter_do(resource_func, 2)
-    @info "Resource ready" x
-end
+# Safely access the resource in the REPL
+x = @! enter_do(resource_func, 2)
 ```
 
 # Design
