@@ -53,6 +53,19 @@ end
 # Name of the context variable
 const _context_name = :var"#context"
 
+function _current_context_expr(__module__, __source__)
+    quote
+        if $(Expr(:islocal, esc(_context_name)))
+            # Or this Expr(:isdefined)? Really, we'd like
+            #   * Strict `:islocal` if inside a function
+            #   * `:isdefined` for top level exprs
+            $(esc(_context_name))
+        else
+            global_context($__module__, $(__source__.line), $(QuoteNode(__source__.file)))
+        end
+    end
+end
+
 """
     @defer expression
 
@@ -61,8 +74,7 @@ Defers execution of the cleanup `expression` until the exit of the current
 """
 macro defer(ex)
     quote
-        ctx = $(Expr(:islocal, esc(_context_name))) ?
-            $(esc(_context_name)) : global_context($__module__, $(__source__.line), $(QuoteNode(__source__.file)))
+        ctx = $(_current_context_expr(__module__, __source__))
         defer(()->$(esc(ex)), ctx)
     end
 end
@@ -126,8 +138,7 @@ macro !(ex)
         map!(a->esc(a), ex.args, ex.args)
         insert!(ex.args, i, :ctx)
         quote
-            ctx = $(Expr(:islocal, esc(_context_name))) ?
-                $(esc(_context_name)) : global_context($__module__, $(__source__.line), $(QuoteNode(__source__.file)))
+            ctx = $(_current_context_expr(__module__, __source__))
             $ex
         end
     elseif isexpr(ex, :function)
