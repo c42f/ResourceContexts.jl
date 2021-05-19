@@ -154,6 +154,31 @@ macro !(ex)
     end
 end
 
+# Global context
+function __init__()
+    atexit() do
+        global_cleanup!()
+    end
+end
+
+_global_context = Context(false)
+
+@noinline function global_context(_module, file, line)
+    @warn """Using global `Context` — use a `@context` block to avoid this warning.
+             Use `Contexts.global_cleanup!()` to clean up the resource.""" #=
+        =# _module=_module _group="context" _file=string(file) _line=line
+    _global_context
+end
+
+function global_cleanup!()
+    cleanup!(_global_context)
+    empty!(_global_context.resources)
+    nothing
+end
+
+#-------------------------------------------------------------------------------
+# Utilities
+
 """
     @! enter_do(func, args...)
 
@@ -201,29 +226,8 @@ x,y = @! enter_do(func, args...)
     args
 end
 
+
 #-------------------------------------------------------------------------------
-# Global context
-function __init__()
-    atexit() do
-        global_cleanup!()
-    end
-end
-
-_global_context = Context(false)
-
-@noinline function global_context(_module, file, line)
-    @warn """Using global `Context` — use a `@context` block to avoid this warning.
-             Use `Contexts.global_cleanup!()` to clean up the resource.""" #=
-        =# _module=_module _group="context" _file=string(file) _line=line
-    _global_context
-end
-
-function global_cleanup!()
-    cleanup!(_global_context)
-    empty!(_global_context.resources)
-    nothing
-end
-
 include("base_interop.jl")
 
 end
