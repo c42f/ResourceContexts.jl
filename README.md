@@ -159,6 +159,21 @@ dir = @context begin
 end
 ```
 
+### Async resources
+
+```julia
+@context begin
+    ch = @manage Channel()
+    @async_ while true
+        msg = take!(ch)
+        @info "hi" msg
+    end
+    for i=1:10
+        put!(ch, i)
+    end
+end
+```
+
 # Design
 
 The standard solution for Julian resource management is still the `do` block,

@@ -1,6 +1,6 @@
 module Contexts
 
-export @context, @!, @defer, enter_do, Context
+export @context, @!, @defer, enter_do, @manage, @async_
 
 abstract type AbstractContext end
 
@@ -8,11 +8,12 @@ using Base.Meta: isexpr
 
 mutable struct Context <: AbstractContext
     resources::Vector{Any}
+    cancel_tokens::Vector{Any}
     is_detached::Bool
 end
 
 function Context(needs_finalizer::Bool=true)
-    c = Context(Vector{Any}(), false)
+    c = Context(Vector{Any}(), Vector{Any}(), false)
     if needs_finalizer
         finalizer(cleanup!, c)
     end
@@ -42,6 +43,7 @@ end
 
 function cleanup!(context::Context, unscope_cleanup_point=true)
     if !context.is_detached || unscope_cleanup_point
+        cancel!(context)
         # Clean up resources, last to first.
         _cleanup!(context.resources, length(context.resources))
     end
@@ -117,6 +119,18 @@ macro context(ex)
                 finally
                     cleanup!($(esc(_context_name)), false)
                 end
+            end
+        end
+    end
+end
+
+macro context(ctx, ex)
+    quote
+        let $(esc(_context_name)) = $(esc(ctx))
+            try
+                $(esc(ex))
+            finally
+                cleanup!($(esc(_context_name)), false)
             end
         end
     end
@@ -280,6 +294,57 @@ function detach_context_cleanup(ctx::AbstractContext, x)
     end
     x
 end
+
+#-------------------------------------------------------------------------------
+# @async stuff
+
+
+macro async_(ex)
+    quote
+        ctx = $(_current_context_expr(__module__, __source__))
+        t = @async $(esc(ex))
+        defer(()->wait(t), ctx)
+    end
+end
+
+cancel!(x) = close(x)
+
+function cancel!(ctx::AbstractContext)
+    for tok in ctx.cancel_tokens
+        cancel!(tok)
+    end
+end
+
+function manage(ctx::Context, x)
+    push!(ctx.cancel_tokens, x)
+    x
+end
+
+macro manage(ex)
+    quote
+        ctx = $(_current_context_expr(__module__, __source__))
+        manage(ctx, $(esc(ex)))
+    end
+end
+
+
+#=
+struct CancelToken
+    cancelled::Ref{Bool}
+    cond::Threads.Condition
+end
+
+CancelToken() = CancelToken(Ref(false), Threads.Condition())
+
+function Base.close(token::CancelToken)
+    lock(token.cond) do
+        token.cancelled[] = true
+        notify(token.cond)
+    end
+end
+Base.isopen(token::CancelToken) = lock(()->!token.cancelled[], token.cond)
+Base.wait(token::CancelToken)   = lock(()->wait(token.cond), token.cond)
+=#
 
 #-------------------------------------------------------------------------------
 include("base_interop.jl")
