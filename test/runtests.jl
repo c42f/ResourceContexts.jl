@@ -78,6 +78,29 @@ end
     end == ErrorException("Oops2")
 end
 
+@testset "detach_context_cleanup" begin
+    did_cleanup = false
+    @noinline function use_context_and_detach()
+        some_value = @context begin
+            @defer did_cleanup = true
+            @defer begin
+                yield()  # Task switching during cleanup should be ok
+            end
+            @! Contexts.detach_context_cleanup([1,2])
+        end
+        x = copy(some_value)  # prevent holding some_value live
+        @test x == [1,2]
+        @test !did_cleanup
+    end
+    use_context_and_detach()
+    @test !did_cleanup
+    GC.gc()
+    # These yields are required because
+    yield() # 1) The cleanup is run async within the finalizer
+    yield() # 2) The cleanup calls yield() to assert task switching is ok
+    @test did_cleanup
+end
+
 @testset "Cleanup robustness" begin
     cleanup_count = 0
     ctx = Contexts.Context()

@@ -7,11 +7,12 @@ abstract type AbstractContext end
 using Base.Meta: isexpr
 
 mutable struct Context <: AbstractContext
-    resources
+    resources::Vector{Any}
+    is_detached::Bool
 end
 
 function Context(needs_finalizer::Bool=true)
-    c = Context([])
+    c = Context(Vector{Any}(), false)
     if needs_finalizer
         finalizer(cleanup!, c)
     end
@@ -21,7 +22,7 @@ end
 cleanup!(x) = close(x)
 cleanup!(f::Function) = f()
 
-# This recursive arrangement does two things:
+# This partially recursive arrangement does two things:
 # 1. Avoids paying the try/catch setup cost more than once when no exceptions
 #    occur.
 # 2. Arranges all exceptions on the exception stack, reflecting the cleanup
@@ -39,12 +40,19 @@ function _cleanup!(resources, i)
     end
 end
 
-function cleanup!(context::Context)
-    # Clean up resources last to first.
-    _cleanup!(context.resources, length(context.resources))
+function cleanup!(context::Context, unscope_cleanup_point=true)
+    if !context.is_detached || unscope_cleanup_point
+        # Clean up resources, last to first.
+        _cleanup!(context.resources, length(context.resources))
+    end
     nothing
 end
 
+"""
+    defer(f::Function, `ctx`)
+
+Defer the call to `f` until `ctx` is cleaned up.
+"""
 function defer(f::Function, ctx::Context)
     push!(ctx.resources, f)
     nothing
@@ -97,7 +105,7 @@ macro context(ex)
                 $(_context_name) = $Contexts.Context(false)
                 $(ex.args[2])
             finally
-                $Contexts.cleanup!($(_context_name))
+                $Contexts.cleanup!($(_context_name), false)
             end
         end
         esc(ex)
@@ -107,7 +115,7 @@ macro context(ex)
                 try
                     $(esc(ex))
                 finally
-                    cleanup!($(esc(_context_name)))
+                    cleanup!($(esc(_context_name)), false)
                 end
             end
         end
@@ -177,7 +185,7 @@ function global_cleanup!()
 end
 
 #-------------------------------------------------------------------------------
-# Utilities
+# Utilities for interoperating with context-unaware code.
 
 """
     @! enter_do(func, args...)
@@ -226,6 +234,52 @@ x,y = @! enter_do(func, args...)
     args
 end
 
+
+"""
+    @! detach_context_cleanup(x)
+
+Defer the cleanup of `context` to the time at which `x` is finalized by the
+garbage collector and return `x`. This transforms context-based resource
+handling into finalizer-based resource handling.
+
+For this to work, `x` must be mutable. If `x` is immutable you could consider
+making a wrapper type with the same API.
+
+!!! note
+    This function is best avoided if possible because it makes any failures during
+    context cleanup impossible to handle neatly — instead, they are caught and
+    logged asynchronously. However, it's very useful for interacting with
+    context-unaware code.
+
+# Examples
+
+Create a temporary directory with two files in it, and return the directory
+name as a string.  Cleanup of the directory is associated with finalization of
+the string `dir`.
+
+```
+dir = @context begin
+    dir = @! mktempdir()
+    write(joinpath(dir, "file1.txt"), "Some content")
+    write(joinpath(dir, "file2.txt"), "Some other content")
+    @! Contexts.detach_context_cleanup(dir)
+end
+```
+"""
+function detach_context_cleanup(ctx::AbstractContext, x)
+    ctx.is_detached = true
+    finalizer(x) do _
+        # Must be async, as the finalizer itself isn't allowed to task switch
+        # and context cleanup may involve several task-switchy things
+        @async try
+            cleanup!(ctx)
+        catch exc
+            @error "Error cleaning up context" exception=(exc, catch_backtrace())
+            rethrow()
+        end
+    end
+    x
+end
 
 #-------------------------------------------------------------------------------
 include("base_interop.jl")

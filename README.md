@@ -139,6 +139,26 @@ end
 x = @! enter_do(resource_func, 2)
 ```
 
+### Interop with finalizer-based resource management
+
+The special function `@! detach_context_cleanup(x)` can be used to detach
+context cleanup from the current `@context` block and associate it with the
+finalization of `x` instead. That is, it turns *lexical* resource management
+into *dynamic* resource management.
+
+For example, to create a temporary directory with two files in it, return
+the directory name as a string and only clean up the directory when `dir` is
+finalized:
+
+```
+dir = @context begin
+    dir = @! mktempdir()
+    write(joinpath(dir, "file1.txt"), "Some content")
+    write(joinpath(dir, "file2.txt"), "Some other content")
+    @! Contexts.detach_context_cleanup(dir)
+end
+```
+
 # Design
 
 The standard solution for Julian resource management is still the `do` block,
