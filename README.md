@@ -1,8 +1,8 @@
-# Contexts.jl
+# ResourceContexts.jl
 
-[![Build Status](https://github.com/c42f/Contexts.jl/workflows/CI/badge.svg)](https://github.com/c42f/Contexts.jl/actions)
+[![Build Status](https://github.com/c42f/ResourceContexts.jl/workflows/CI/badge.svg)](https://github.com/c42f/ResourceContexts.jl/actions)
 
-`Contexts` is an experimental Julia package for **composable resource
+`ResourceContexts` is an experimental Julia package for **composable resource
 management** without `do` blocks.
 
 Resources are objects which need cleanup code to run to finalize their state.
@@ -155,7 +155,7 @@ dir = @context begin
     dir = @! mktempdir()
     write(joinpath(dir, "file1.txt"), "Some content")
     write(joinpath(dir, "file2.txt"), "Some other content")
-    @! Contexts.detach_context_cleanup(dir)
+    @! ResourceContexts.detach_context_cleanup(dir)
 end
 ```
 

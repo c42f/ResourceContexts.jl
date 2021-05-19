@@ -1,4 +1,4 @@
-using Contexts
+using ResourceContexts
 using Test
 
 # Use of @! to pass context to resource creation function
@@ -86,7 +86,7 @@ end
             @defer begin
                 yield()  # Task switching during cleanup should be ok
             end
-            @! Contexts.detach_context_cleanup([1,2])
+            @! ResourceContexts.detach_context_cleanup([1,2])
         end
         x = copy(some_value)  # prevent holding some_value live
         @test x == [1,2]
@@ -103,31 +103,31 @@ end
 
 @testset "Cleanup robustness" begin
     cleanup_count = 0
-    ctx = Contexts.Context()
-    Contexts.defer(ctx) do
+    ctx = ResourceContexts.ResourceContext()
+    ResourceContexts.defer(ctx) do
         cleanup_count += 1
     end
-    Contexts.cleanup!(ctx)
-    Contexts.cleanup!(ctx)
+    ResourceContexts.cleanup!(ctx)
+    ResourceContexts.cleanup!(ctx)
     @test cleanup_count == 1
 
     # Exceptions
     cleanup_count = 0
-    ctx = Contexts.Context()
-    Contexts.defer(ctx) do
+    ctx = ResourceContexts.ResourceContext()
+    ResourceContexts.defer(ctx) do
         cleanup_count += 1
     end
-    Contexts.defer(ctx) do
+    ResourceContexts.defer(ctx) do
         error("X")
     end
     try
-        Contexts.cleanup!(ctx)
+        ResourceContexts.cleanup!(ctx)
     catch
     end
     # The second scheduled cleanup should still run even if the first throws
     @test cleanup_count == 1
     # Calling cleanup should not throw again
-    @test isnothing(Contexts.cleanup!(ctx))
+    @test isnothing(ResourceContexts.cleanup!(ctx))
     @test cleanup_count == 1
 end
 
@@ -135,8 +135,8 @@ end
     @testset "Finalization" begin
         did_cleanup = false
         function forgotten_cleanup()
-            ctx = Contexts.Context()
-            Contexts.defer(ctx) do
+            ctx = ResourceContexts.ResourceContext()
+            ResourceContexts.defer(ctx) do
                 did_cleanup = true
             end
         end

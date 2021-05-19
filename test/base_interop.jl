@@ -7,7 +7,7 @@
         io4 = nothing
         @context begin
             (path,io1) = @! mktemp()
-            msg = "hi from Contexts.jl"
+            msg = "hi from ResourceContexts.jl"
             write(io1, msg)
             flush(io1)
             # Test various forms of open()

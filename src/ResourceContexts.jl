@@ -1,18 +1,18 @@
-module Contexts
+module ResourceContexts
 
-export @context, @!, @defer, enter_do, Context
+export @context, @!, @defer, enter_do, ResourceContext
 
 abstract type AbstractContext end
 
 using Base.Meta: isexpr
 
-mutable struct Context <: AbstractContext
+mutable struct ResourceContext <: AbstractContext
     resources::Vector{Any}
     is_detached::Bool
 end
 
-function Context(needs_finalizer::Bool=true)
-    c = Context(Vector{Any}(), false)
+function ResourceContext(needs_finalizer::Bool=true)
+    c = ResourceContext(Vector{Any}(), false)
     if needs_finalizer
         finalizer(cleanup!, c)
     end
@@ -40,7 +40,7 @@ function _cleanup!(resources, i)
     end
 end
 
-function cleanup!(context::Context, unscope_cleanup_point=true)
+function cleanup!(context::ResourceContext, unscope_cleanup_point=true)
     if !context.is_detached || unscope_cleanup_point
         # Clean up resources, last to first.
         _cleanup!(context.resources, length(context.resources))
@@ -53,7 +53,7 @@ end
 
 Defer the call to `f` until `ctx` is cleaned up.
 """
-function defer(f::Function, ctx::Context)
+function defer(f::Function, ctx::ResourceContext)
     push!(ctx.resources, f)
     nothing
 end
@@ -93,7 +93,7 @@ end
 
 `@context` creates a local context and runs the provided code within that
 context. When the code exits, any resources registered with the context will be
-cleaned up with `Contexts.cleanup!()`.
+cleaned up with `ResourceContexts.cleanup!()`.
 
 When the code is a `function` definition, the context block is inserted around
 the function body.
@@ -102,16 +102,16 @@ macro context(ex)
     if ex.head == :function
         ex.args[2] = quote
             try
-                $(_context_name) = $Contexts.Context(false)
+                $(_context_name) = $ResourceContexts.ResourceContext(false)
                 $(ex.args[2])
             finally
-                $Contexts.cleanup!($(_context_name), false)
+                $ResourceContexts.cleanup!($(_context_name), false)
             end
         end
         esc(ex)
     else
         quote
-            let $(esc(_context_name)) = Context(false)
+            let $(esc(_context_name)) = ResourceContext(false)
                 try
                     $(esc(ex))
                 finally
@@ -155,7 +155,7 @@ macro !(ex)
                    ex.args[1].args[1].args : ex.args[1].args
         i = length(callargs) > 1 && isexpr(callargs[2], :parameters) ? 3 : 2
             # handle keywords
-        insert!(callargs, i, :($_context_name::$Contexts.AbstractContext))
+        insert!(callargs, i, :($_context_name::$ResourceContexts.AbstractContext))
         esc(ex)
     else
         error("Expected call or function definition as arguments to `@!`")
@@ -169,11 +169,11 @@ function __init__()
     end
 end
 
-_global_context = Context(false)
+_global_context = ResourceContext(false)
 
 @noinline function global_context(_module, file, line)
-    @warn """Using global `Context` — use a `@context` block to avoid this warning.
-             Use `Contexts.global_cleanup!()` to clean up the resource.""" #=
+    @warn """Using global `ResourceContext` — use a `@context` block to avoid this warning.
+             Use `ResourceContexts.global_cleanup!()` to clean up the resource.""" #=
         =# _module=_module _group="context" _file=string(file) _line=line
     _global_context
 end
@@ -262,7 +262,7 @@ dir = @context begin
     dir = @! mktempdir()
     write(joinpath(dir, "file1.txt"), "Some content")
     write(joinpath(dir, "file2.txt"), "Some other content")
-    @! Contexts.detach_context_cleanup(dir)
+    @! ResourceContexts.detach_context_cleanup(dir)
 end
 ```
 """
