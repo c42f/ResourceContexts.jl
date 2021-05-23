@@ -1,5 +1,6 @@
 using ResourceContexts
 using Test
+using Logging
 
 # Use of @! to pass context to resource creation function
 @! function foo(x, label)
@@ -38,6 +39,32 @@ end
         @test stack[1][1] == ErrorException("B")
         @test stack[2][1] == ErrorException("A")
     end
+end
+
+@! function do_nothing()
+    nothing
+end
+
+Main.eval(:(
+# Eval in Main, in case test is eval'd elsewhere
+function do_nothing_from_function()
+    @! $(@__MODULE__).do_nothing()
+end
+))
+
+@testset "Logging when using the global context" begin
+    q = :(@! do_nothing())
+    # Simulate call coming from the REPL in any module
+    q.args[2] = LineNumberNode(1, Symbol("REPL[1]"))
+    @test_logs (:debug, r"^Using global `ResourceContext`",
+                Test.Ignored(), Test.Ignored(),
+                Test.Ignored(), "REPL[1]", 1) #=
+        =# min_level=Logging.Debug Main.eval(q)
+    # Simulate call coming from Main module in global scope
+    q.args[2] = LineNumberNode(1, Symbol("SomeOtherFile"))
+    @test_logs (:debug,) min_level=Logging.Debug Main.eval(q)
+    # Call coming from within a function
+    @test_logs (:warn,) min_level=Logging.Debug Main.do_nothing_from_function()
 end
 
 @testset "enter_do — context management for `do` blocks" begin

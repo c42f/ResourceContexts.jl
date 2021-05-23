@@ -6,6 +6,8 @@ abstract type AbstractContext end
 
 using Base.Meta: isexpr
 
+using Logging: Logging, @logmsg
+
 mutable struct ResourceContext <: AbstractContext
     resources::Vector{Any}
     is_detached::Bool
@@ -69,7 +71,11 @@ function _current_context_expr(__module__, __source__)
             #   * `:isdefined` for top level exprs
             $(esc(_context_name))
         else
-            global_context($__module__, $(__source__.line), $(QuoteNode(__source__.file)))
+            # Beautiful hack from Simeon Schaub here:
+            # https://github.com/JuliaLang/julia/issues/6733#issuecomment-827441915
+            in_function = $(Expr(:isdefined, esc(:var"#self#")))
+            global_context($__module__, $(QuoteNode(__source__.file)),
+                           $(__source__.line), in_function)
         end
     end
 end
@@ -171,11 +177,16 @@ end
 
 _global_context = ResourceContext(false)
 
-@noinline function global_context(_module, file, line)
-    @warn """Using global `ResourceContext` — use a `@context` block to avoid this warning.
+@noinline function global_context(_module, file, line, in_function)
+    # Heuristically reduce the log level in interactive usage because sloppy
+    # resource management is probably ok there.
+    filestr = string(file)
+    level = ((_module === Main || startswith(filestr, "REPL")) && !in_function) ?
+            Logging.Debug : Logging.Warn
+    @logmsg level """Using global `ResourceContext` — use a `@context` block to avoid this message.
              Use `ResourceContexts.global_cleanup!()` to clean up the resource.""" #=
-        =# _module=_module _group="context" _file=string(file) _line=line
-    _global_context
+        =# _module=_module _group="context" _file=filestr _line=line
+    return _global_context
 end
 
 function global_cleanup!()
