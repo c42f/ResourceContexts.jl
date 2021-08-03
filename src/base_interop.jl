@@ -35,21 +35,6 @@ end
     # could replicate.
 end
 
-# Processes
-
-"""
-    @! run(command, args...)
-
-Run a `command` object asynchronously as in `run(...; wait=false)` and return
-the `Process` object. The process object is bound to the scope of the current
-`@context` and will be waited for with `wait()` when the context exits.
-"""
-@! function Base.run(cmds::Base.AbstractCmd, args...)
-    proc = run(cmds, args..., wait=false)
-    @defer success(proc) || Base.pipeline_error(proc)
-    proc
-end
-
 # Locks
 
 @! function Base.lock(lk::Base.AbstractLock)

@@ -63,20 +63,6 @@
         @test pwd() == oldpath
     end
 
-    @testset "run()" begin
-        in_io = Pipe()
-        out_io = IOBuffer()
-        local proc
-        @context begin
-            proc = @! run(pipeline(`$(Base.julia_cmd()) -e 'write(stdout, readline(stdin))'`,
-                                   stdout=out_io, stdin=in_io))
-            @test !process_exited(proc)
-            println(in_io, "hi")
-        end
-        @test process_exited(proc)
-        @test String(take!(out_io)) == "hi"
-    end
-
     @testset "lock()" begin
         lk = ReentrantLock()
         @context begin
