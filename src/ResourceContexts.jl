@@ -217,32 +217,43 @@ x,y = @! enter_do(func, args...)
 ```
 """
 @! function enter_do(func::Function, args...; kws...)
-    value = Channel(1) # Must be buffered in case two values are put!
-    done = Channel(1) # Must be buffered in case listening task is dead
-    function do_block_proxy(args...)
-        put!(value, args)
-        take!(done)
-    end
-    task = @async try
-        func(do_block_proxy, args...; kws...)
+    # We need a separate stack to run the do block, so we use a separate task
+    # here for that purpose. We know exactly which order the parent and child
+    # tasks should run in so we should be able to use explicit yields and not
+    # involve the main scheduler.
+    parent_task = current_task()
+    child_task = @task try
+        func(args...; kws...) do resources...
+            yieldto(parent_task, resources)
+        end
+        # Success path: yield back to parent - `task` will never complete, but
+        # we've already run whatever cleanup code in `func` so that should be ok.
+        yieldto(parent_task, nothing)
     catch
-        # In case of failure, ensure the receiving task has something to take
-        # from the channel.
-        put!(value, nothing)
+        # Failure path
+        yieldto(parent_task, :failed)
         rethrow()
     end
-    args = take!(value)
-    if isnothing(args)
-        @assert istaskfailed(task)
-        # The task is failed at this point and we don't have a valid value to
-        # return. Thus, force a TaskFailedException immediately.
-        wait(task)
+    res = yieldto(child_task)
+    if res === :failed
+        # There was an exception during setup of the resource. We don't have a
+        # value to return so force a TaskFailedException, ensuring that the
+        # child task is scheduled so that it can run to completion while we
+        # wait.
+        schedule(child_task)
+        wait(child_task)
     end
     @defer begin
-        put!(done, true) # trigger async task to exit and free resources
-        wait(task)       # failures in `task` will be reported from here
+        # Allow child task to free any resources
+        res = yieldto(child_task)
+        if res === :failed
+            # There was an exception during resource cleanup - report this with
+            # a TaskFailedException.
+            schedule(child_task)
+            wait(child_task)
+        end
     end
-    args
+    return res
 end
 
 
