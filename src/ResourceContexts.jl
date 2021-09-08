@@ -222,17 +222,23 @@ x,y = @! enter_do(func, args...)
     # tasks should run in so we should be able to use explicit yields and not
     # involve the main scheduler.
     parent_task = current_task()
-    child_task = @task try
-        func(args...; kws...) do resources...
-            yieldto(parent_task, resources)
+    child_task = @task begin
+        # cleanup_caller is the task which triggered yieldto(child_task) in the
+        # @defer'd cleanup code further down.
+        cleanup_caller::Task = parent_task
+        try
+            func(args...; kws...) do resources...
+                cleanup_caller = yieldto(parent_task, resources)
+            end
+            # Success path: yield back to whoever triggered the cleanup.
+            # `child_task` will never complete, but we've already run whatever
+            # cleanup code in `func` so that should be ok.
+            yieldto(cleanup_caller, nothing)
+        catch
+            # Failure path
+            yieldto(cleanup_caller, :failed)
+            rethrow()
         end
-        # Success path: yield back to parent - `task` will never complete, but
-        # we've already run whatever cleanup code in `func` so that should be ok.
-        yieldto(parent_task, nothing)
-    catch
-        # Failure path
-        yieldto(parent_task, :failed)
-        rethrow()
     end
     res = yieldto(child_task)
     if res === :failed
@@ -245,7 +251,11 @@ x,y = @! enter_do(func, args...)
     end
     @defer begin
         # Allow child task to free any resources
-        res = yieldto(child_task)
+        #
+        # If the user has called detach_context_cleanup(), this code may run in
+        # a task other than parent_task and we need to make sure we yield back
+        # appropriately.
+        res = yieldto(child_task, current_task())
         if res === :failed
             # There was an exception during resource cleanup - report this with
             # a TaskFailedException.
