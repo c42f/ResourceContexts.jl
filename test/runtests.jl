@@ -1,6 +1,7 @@
 using ResourceContexts
 using Test
 using Logging
+using Compat
 
 # Use of @! to pass context to resource creation function
 @! function foo(x, label)
@@ -35,7 +36,7 @@ end
             @defer error("B")
         end
     catch exc
-        stack = Base.catch_stack()
+        stack = current_exceptions()
         @test stack[1][1] == ErrorException("B")
         @test stack[2][1] == ErrorException("A")
     end
@@ -92,7 +93,7 @@ end
         end
     catch e
         @test e isa TaskFailedException
-        first(Base.catch_stack(e.task))[1]
+        first(current_exceptions(e.task))[1]
     end == ErrorException("Oops1")
 
     @test try
@@ -101,7 +102,7 @@ end
         end
     catch e
         @test e isa TaskFailedException
-        first(Base.catch_stack(e.task))[1]
+        first(current_exceptions(e.task))[1]
     end == ErrorException("Oops2")
 end
 

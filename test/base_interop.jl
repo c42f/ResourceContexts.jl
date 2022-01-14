@@ -97,11 +97,7 @@
             seek(io, 0)
             stderr_result = readline(io)
         end
-        if VERSION < v"1.7-DEV"
-            @test stderr_result == "hi"
-        else
-            @test_broken stderr_result == "hi"
-        end
+        @test stderr_result == "hi"
 
         stdin_result = nothing
         @context begin
@@ -112,11 +108,7 @@
             @! redirect_stdin(io)
             stdin_result = readline()
         end
-        if VERSION < v"1.7-DEV"
-            @test stdin_result == "hi"
-        else
-            @test_broken stdin_result == "hi"
-        end
+        @test stdin_result == "hi"
 
         @test orig_stdin == stdin
         @test orig_stdout == stdout
