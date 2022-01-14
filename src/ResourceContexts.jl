@@ -107,8 +107,8 @@ the function body.
 macro context(ex)
     if ex.head == :function
         ex.args[2] = quote
+            $(_context_name) = $ResourceContexts.ResourceContext(false)
             try
-                $(_context_name) = $ResourceContexts.ResourceContext(false)
                 $(ex.args[2])
             finally
                 $ResourceContexts.cleanup!($(_context_name), false)

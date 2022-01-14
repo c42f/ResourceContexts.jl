@@ -29,6 +29,19 @@ end
     @test cleanups == [:D, :C, :B, :A]
 end
 
+@testset "@context before function def" begin
+    @context function func_with_context()
+        cleanups = []
+        @defer push!(cleanups, :A)
+        @defer push!(cleanups, :B)
+        @test isempty(cleanups)
+        return cleanups
+    end
+
+    cleanups = func_with_context()
+    @test cleanups == [:B, :A]
+end
+
 @testset "Exceptions during cleanup" begin
     try
         @context begin
