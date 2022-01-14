@@ -1,7 +1,7 @@
 name = "ResourceContexts"
 uuid = "8d208092-d35c-4dd3-a0d7-8325f9cce6b4"
 authors = ["Chris Foster <chris42f@gmail.com> and contributors"]
-version = "0.1.1"
+version = "0.2.0"
 
 [deps]
 Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
