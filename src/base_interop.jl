@@ -45,6 +45,10 @@ end
 
 # Standard streams
 
+# Incompatibility due to
+# https://github.com/JuliaLang/julia/pull/39132
+@static if VERSION < v"1.7"
+
 @! function Base.redirect_stdout(stream)
     prev_stream = stdout
     x = redirect_stdout(stream)
@@ -66,3 +70,21 @@ end
     x
 end
 
+else
+
+@! function (f::Base.RedirectStdStream)(stream)
+    # See https://github.com/JuliaLang/julia/blob/294b0dfcd308b3c3f829b2040ca1e3275595e058/base/stream.jl#L1417
+    stdold = f.unix_fd == 0 ? stdin :
+             f.unix_fd == 1 ? stdout :
+             f.unix_fd == 2 ? stderr :
+             throw(ArgumentError("Not implemented to get old handle of fd except for stdio"))
+    x = f(stream)
+    @defer f(stdold)
+    x
+end
+
+@! function Base.redirect_stdio(; kws...)
+    @! enter_do(redirect_stdio; kws...)
+end
+
+end
