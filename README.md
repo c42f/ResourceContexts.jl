@@ -150,7 +150,7 @@ For example, to create a temporary directory with two files in it, return
 the directory name as a string and only clean up the directory when `dir` is
 finalized:
 
-```
+```julia
 dir = @context begin
     dir = @! mktempdir()
     write(joinpath(dir, "file1.txt"), "Some content")
